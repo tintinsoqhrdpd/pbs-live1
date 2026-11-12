@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Official Eviction Standings — Vote Tally Generator</title>
+  
+  <!-- Google Fonts: Montserrat & Inter for broadcast headers, Space Mono & JetBrains Mono for crisp tabular figures -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700;800&family=Montserrat:wght@700;800;900&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- html2canvas for 1-click PNG export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Montserrat', 'sans-serif'],
+            mono: ['Space Mono', 'JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            broadcast: {
+              bg: '#090b12',
+              card: '#0e111b',
+              border: '#252a3a',
+              track: '#1c2130',
+              save: '#38d97c',
+              evict: '#df3646',
+              evictText: '#e04856',
+              cyan: '#38d2f2',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #07090f;
+      color: #f1f5f9;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Exact broadcast graphic container styling */
+    .graphic-canvas {
+      background-color: #090b12;
+      background-image: radial-gradient(circle at 50% 0%, #111627 0%, #090b12 70%);
+    }
+
+    /* Nominee Pill Row Card matching image_a4b6fd.jpg */
+    .standings-card {
+      background-color: #0e111b;
+      border: 1.5px solid #262b3b;
+      border-radius: 20px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .standings-card:hover {
+      border-color: #363e54;
+    }
+
+    /* Pill Progress Tracks */
+    .pill-track {
+      background-color: #1c2131;
+      border-radius: 9999px;
+      height: 28px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45);
+    }
+
+    /* Left BBS Fill: Anchored to the RIGHT edge (next to badge) and grows LEFTWARD */
+    .bar-fill-left {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      background-color: #38d97c;
+      border-top-left-radius: 9999px;
+      border-bottom-left-radius: 9999px;
+      border-top-right-radius: 3px;
+      border-bottom-right-radius: 3px;
+      transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 0 12px rgba(56, 217, 124, 0.25);
+    }
+
+    /* Right BBE Fill: Anchored to the LEFT edge (next to badge) and grows RIGHTWARD */
+    .bar-fill-right {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      background-color: #df3646;
+      border-top-right-radius: 9999px;
+      border-bottom-right-radius: 9999px;
+      border-top-left-radius: 3px;
+      border-bottom-left-radius: 3px;
+      transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 0 12px rgba(223, 54, 70, 0.25);
+    }
+
+    /* Center Nominee Circle Badge */
+    .nominee-badge {
+      width: 58px;
+      height: 58px;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 800;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 0 0 3px rgba(0, 0, 0, 0.18);
+      flex-shrink: 0;
+      transition: transform 0.2s ease, background-color 0.2s ease;
+    }
+
+    /* Monospace tabular numbers for strict alignment */
+    .tabular-pct {
+      font-family: 'Space Mono', 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+
+    /* Custom subtle scrollbar for editor */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b0e17;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #262c3d;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #38415a;
+    }
+
+    /* Range slider styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: #1e2436;
+      height: 6px;
+      border-radius: 999px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid #0e111b;
+    }
+    input[type="range"].slider-save::-webkit-slider-thumb {
+      background: #38d97c;
+    }
+    input[type="range"].slider-evict::-webkit-slider-thumb {
+      background: #df3646;
+    }
+
+    @media (max-width: 520px) {
+      .nominee-badge {
+        width: 46px;
+        height: 46px;
+        font-size: 1.15rem;
+      }
+      .pill-track {
+        height: 22px;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Utility Bar -->
+  <header id="topToolbar" class="sticky top-0 z-30 bg-[#0d101b]/95 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#38d97c] to-[#3b76f6] flex items-center justify-center font-display font-black text-slate-950 text-sm shadow-md">
+          TV
+        </div>
+        <div>
+          <h1 class="font-display font-bold text-sm sm:text-base text-white tracking-wide leading-tight">EVICTION TALLY STUDIO</h1>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Live Broadcast Standings & Combined Net Score Generator</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- View Filter Buttons -->
+        <div class="inline-flex rounded-lg bg-[#161b2b] p-1 border border-slate-800 text-xs font-medium">
+          <button onclick="setGraphView('both')" id="btnViewBoth" class="px-2.5 py-1.5 rounded-md bg-slate-700 text-white transition">Both Graphs</button>
+          <button onclick="setGraphView('split')" id="btnViewSplit" class="px-2.5 py-1.5 rounded-md text-slate-400 hover:text-white transition">BBS vs BBE</button>
+          <button onclick="setGraphView('combined')" id="btnViewCombined" class="px-2.5 py-1.5 rounded-md text-slate-400 hover:text-white transition">Combined</button>
+        </div>
+
+        <!-- Toggle Editor / Screenshot Mode -->
+        <button onclick="toggleEditor()" id="btnToggleEditor" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#192033] hover:bg-[#232c45] border border-slate-700/80 text-xs font-semibold text-slate-200 transition">
+          <svg id="eyeIcon" class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          <span id="toggleEditorText">Screenshot Mode</span>
+        </button>
+
+        <!-- Download PNG -->
+        <button onclick="downloadPNG()" id="btnDownload" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#38d97c] hover:bg-[#2ec46d] text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/15 transition cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          <span>Save PNG</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Floating Exit Screenshot Mode Button (visible only when editor is hidden) -->
+  <button id="exitScreenshotBtn" onclick="toggleEditor()" class="hidden fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-full bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-semibold border border-slate-600 shadow-2xl backdrop-blur-md flex items-center gap-2">
+    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+    Show Editor Panel
+  </button>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    
+    <!-- LEFT / MAIN: Broadcast Graphic Preview Area -->
+    <section id="previewColumn" class="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
+      
+      <!-- Exportable Capture Container -->
+      <div id="captureArea" class="flex flex-col gap-6 rounded-2xl">
+        
+        <!-- GRAPH 1: SPLIT VOTE TO SAVE (BBS) vs VOTE TO EVICT (BBE) -->
+        <div id="splitGraphCard" class="graphic-canvas rounded-2xl border border-slate-800/90 px-4 sm:px-8 py-7 sm:py-9 shadow-2xl">
+          <!-- Header Block -->
+          <div class="text-center mb-6 sm:mb-7">
+            <p id="renderSplitSubtitle" class="font-display font-extrabold text-[11px] sm:text-xs tracking-[0.22em] text-[#38d2f2] uppercase mb-1.5">
+              TALLY OF VOTES AS OF LIVE
+            </p>
+            <h2 id="renderSplitTitle" class="font-display font-black text-xl sm:text-3xl tracking-[0.04em] text-[#dfe4ee] uppercase">
+              OFFICIAL EVICTION STANDINGS
+            </h2>
+
+            <!-- Legend Row -->
+            <div class="flex flex-wrap items-center justify-center gap-5 sm:gap-8 mt-4 text-xs sm:text-sm font-medium text-slate-300">
+              <div class="flex items-center gap-2.5">
+                <span class="w-3.5 h-3.5 rounded-full bg-[#38d97c] inline-block shadow-[0_0_8px_rgba(56,217,124,0.6)]"></span>
+                <span id="renderLegendSave" class="tracking-wide text-slate-200">VOTE TO SAVE (BBS)</span>
+              </div>
+              <div class="flex items-center gap-2.5">
+                <span id="evictDotIndicator" class="w-3.5 h-3.5 rounded-full bg-[#090b12] border border-slate-500 inline-block"></span>
+                <span id="renderLegendEvict" class="tracking-wide text-slate-300">VOTE TO EVICT (BBE)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nominee Rows Container (Split BBS / BBE) -->
+          <div id="splitRowsContainer" class="flex flex-col gap-3.5 sm:gap-4 max-w-2xl mx-auto">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- GRAPH 2: COMBINED / NET TALLY (BBS MINUS BBE) -->
+        <div id="combinedGraphCard" class="graphic-canvas rounded-2xl border border-slate-800/90 px-4 sm:px-8 py-7 sm:py-9 shadow-2xl">
+          <!-- Header Block -->
+          <div class="text-center mb-6 sm:mb-7">
+            <p id="renderCombinedSubtitle" class="font-display font-extrabold text-[11px] sm:text-xs tracking-[0.22em] text-[#38d2f2] uppercase mb-1.5">
+              NET COMBINED TALLY (BBS − BBE)
+            </p>
+            <h2 id="renderCombinedTitle" class="font-display font-black text-xl sm:text-3xl tracking-[0.04em] text-[#dfe4ee] uppercase">
+              COMBINED EVICTION STANDINGS
+            </h2>
+
+            <!-- Combined Legend Row -->
+            <div class="flex flex-wrap items-center justify-center gap-5 sm:gap-8 mt-4 text-xs sm:text-sm font-medium text-slate-300">
+              <div class="flex items-center gap-2">
+                <span class="w-3.5 h-3.5 rounded-full bg-[#38d97c] inline-block shadow-[0_0_8px_rgba(56,217,124,0.6)]"></span>
+                <span id="renderCombinedPosLegend" class="tracking-wide text-slate-200">NET SAVE (+)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-3.5 h-3.5 rounded-full bg-[#df3646] inline-block shadow-[0_0_8px_rgba(223,54,70,0.6)]"></span>
+                <span id="renderCombinedNegLegend" class="tracking-wide text-slate-300">NET EVICT (−)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nominee Rows Container (Combined Net Score) -->
+          <div id="combinedRowsContainer" class="flex flex-col gap-3.5 sm:gap-4 max-w-2xl mx-auto">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- RIGHT: Live Editor Panel -->
+    <aside id="editorColumn" class="lg:col-span-5 xl:col-span-4 bg-[#0d101b] border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col gap-5">
+      
+      <!-- Editor Section Tabs -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-[#38d97c] animate-pulse"></span>
+          <h3 class="font-display font-bold text-sm uppercase tracking-wider text-white">Live Data & Header Editor</h3>
+        </div>
+        <button onclick="resetToSample()" class="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 underline underline-offset-2 cursor-pointer">
+          Reset Default
+        </button>
+      </div>
+
+      <!-- 1. Nominee Votes Editor -->
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Nominees & Vote Percentages</label>
+          <button onclick="addNominee()" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 border border-slate-700 transition cursor-pointer">
+            <span>+ Add Row</span>
+          </button>
+        </div>
+
+        <!-- Totals Summary Pill -->
+        <div class="grid grid-cols-2 gap-2 bg-[#141929] p-2.5 rounded-xl border border-slate-800/80 text-xs">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-slate-400">Total BBS:</span>
+            <span id="totalSaveDisplay" class="font-mono font-bold text-[#38d97c]">50.00%</span>
+          </div>
+          <div class="flex items-center justify-between px-1 border-l border-slate-800">
+            <span class="text-slate-400">Total BBE:</span>
+            <span id="totalEvictDisplay" class="font-mono font-bold text-[#e04856]">50.00%</span>
+          </div>
+        </div>
+
+        <!-- Nominee Input Cards List -->
+        <div id="nomineeEditorsList" class="flex flex-col gap-3 max-h-[460px] overflow-y-auto pr-1">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- 2. Graph Options & Scale -->
+      <div class="border-t border-slate-800 pt-4 flex flex-col gap-3">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Display & Scale Settings</label>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+          <!-- Bar Scale Mode -->
+          <div class="bg-[#141929] p-2.5 rounded-xl border border-slate-800">
+            <span class="block text-[11px] text-slate-400 mb-1">Bar Fill Scale</span>
+            <select id="scaleModeSelect" onchange="updateSettings()" class="w-full bg-[#0b0e17] border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 font-medium focus:outline-none focus:border-cyan-400">
+              <option value="50">Broadcast Scale (Max 50%)</option>
+              <option value="100">Full 100% Scale</option>
+              <option value="auto">Auto-Fit Highest Value</option>
+            </select>
+          </div>
+
+          <!-- Combined Sort Order -->
+          <div class="bg-[#141929] p-2.5 rounded-xl border border-slate-800">
+            <span class="block text-[11px] text-slate-400 mb-1">Combined Graph Order</span>
+            <select id="combinedSortSelect" onchange="updateSettings()" class="w-full bg-[#0b0e17] border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 font-medium focus:outline-none focus:border-cyan-400">
+              <option value="original">Keep A-B-C-D Order</option>
+              <option value="highest">Highest Net Score First</option>
+              <option value="lowest">Lowest Net Score First</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Evict Legend Dot Style -->
+        <div class="flex items-center justify-between bg-[#141929] px-3 py-2 rounded-xl border border-slate-800 text-xs">
+          <span class="text-slate-300">Evict Legend Dot Style:</span>
+          <div class="flex gap-1.5">
+            <button onclick="setEvictDotStyle('hollow')" id="dotHollowBtn" class="px-2 py-1 rounded bg-slate-700 text-white text-[11px] font-medium">Dark Ring</button>
+            <button onclick="setEvictDotStyle('red')" id="dotRedBtn" class="px-2 py-1 rounded bg-slate-900 text-slate-400 text-[11px] font-medium">Crimson Dot</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Headers & Labels Editor -->
+      <div class="border-t border-slate-800 pt-4 flex flex-col gap-3">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Headers & Legend Labels</label>
+
+        <div class="flex flex-col gap-2.5 text-xs">
+          <div>
+            <span class="block text-[11px] text-slate-400 mb-1">Main Graph Subtitle</span>
+            <input type="text" id="inputSplitSubtitle" oninput="updateHeaders()" value="TALLY OF VOTES AS OF LIVE"
+              class="w-full bg-[#141929] border border-slate-700/90 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-400" />
+          </div>
+
+          <div>
+            <span class="block text-[11px] text-slate-400 mb-1">Main Graph Title</span>
+            <input type="text" id="inputSplitTitle" oninput="updateHeaders()" value="OFFICIAL EVICTION STANDINGS"
+              class="w-full bg-[#141929] border border-slate-700/90 rounded-lg px-3 py-2 text-white font-bold focus:outline-none focus:border-cyan-400" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="block text-[11px] text-slate-400 mb-1">Left Legend (Save)</span>
+              <input type="text" id="inputLegendSave" oninput="updateHeaders()" value="VOTE TO SAVE (BBS)"
+                class="w-full bg-[#141929] border border-slate-700/90 rounded-lg px-2.5 py-2 text-white focus:outline-none focus:border-emerald-400" />
+            </div>
+            <div>
+              <span class="block text-[11px] text-slate-400 mb-1">Right Legend (Evict)</span>
+              <input type="text" id="inputLegendEvict" oninput="updateHeaders()" value="VOTE TO EVICT (BBE)"
+                class="w-full bg-[#141929] border border-slate-700/90 rounded-lg px-2.5 py-2 text-white focus:outline-none focus:border-rose-400" />
+            </div>
+          </div>
+
+          <div class="pt-1">
+            <span class="block text-[11px] text-slate-400 mb-1">Combined Graph Subtitle</span>
+            <input type="text" id="inputCombinedSubtitle" oninput="updateHeaders()" value="NET COMBINED TALLY (BBS − BBE)"
+              class="w-full bg-[#141929] border border-slate-700/90 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-400" />
+          </div>
+
+          <div>
+            <span class="block text-[11px] text-slate-400 mb-1">Combined Graph Title</span>
+            <input type="text" id="inputCombinedTitle" oninput="updateHeaders()" value="COMBINED EVICTION STANDINGS"
+              class="w-full bg-[#141929] border border-slate-700/90 rounded-lg px-3 py-2 text-white font-bold focus:outline-none focus:border-cyan-400" />
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toastMsg" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full bg-slate-800 border border-slate-600 text-white text-xs font-semibold shadow-2xl opacity-0 pointer-events-none transition-opacity duration-300">
+    Saved PNG image!
+  </div>
+
+  <script>
+    // Default dataset matching image_a4b6fd.jpg
+    const DEFAULT_NOMINEES = [
+      { id: 'n1', label: 'A', color: '#3b76f6', save: 2.00, evict: 8.00 },
+      { id: 'n2', label: 'B', color: '#f5a623', save: 36.00, evict: 18.00 },
+      { id: 'n3', label: 'C', color: '#e53935', save: 8.00, evict: 10.00 },
+      { id: 'n4', label: 'D', color: '#22a06b', save: 4.00, evict: 14.00 }
+    ];
+
+    const PRESET_COLORS = [
+      '#3b76f6', // Royal Blue
+      '#f5a623', // Warm Amber
+      '#e53935', // Crimson Red
+      '#22a06b', // Emerald Green
+      '#8b5cf6', // Violet
+      '#ec4899', // Pink
+      '#06b6d4', // Cyan
+      '#f97316'  // Orange
+    ];
+
+    let nominees = JSON.parse(JSON.stringify(DEFAULT_NOMINEES));
+    let scaleMode = '50';
+    let combinedSort = 'original';
+    let evictDotStyle = 'hollow';
+    let editorVisible = true;
+
+    // Format number to 2 decimal places
+    function formatPct(val) {
+      const num = parseFloat(val);
+      if (isNaN(num)) return '0.00';
+      return num.toFixed(2);
+    }
+
+    // Calculate bar percentage width relative to selected scale mode
+    function getBarWidthPct(value, maxScale) {
+      const absVal = Math.abs(parseFloat(value) || 0);
+      if (absVal <= 0) return 0;
+      const pct = (absVal / maxScale) * 100;
+      // Ensure tiny non-zero values like 2.00% still show a crisp visible sliver like the reference image
+      return Math.min(100, Math.max(2.5, pct));
+    }
+
+    function getEffectiveMaxScale() {
+      if (scaleMode === '100') return 100;
+      if (scaleMode === '50') return 50;
+      // Auto mode: find max across save, evict, and net
+      let maxVal = 10;
+      nominees.forEach(n => {
+        const net = Math.abs((parseFloat(n.save) || 0) - (parseFloat(n.evict) || 0));
+        maxVal = Math.max(maxVal, parseFloat(n.save) || 0, parseFloat(n.evict) || 0, net);
+      });
+      return maxVal * 1.15;
+    }
+
+    // Render both graphic panels
+    function renderGraphs() {
+      const splitContainer = document.getElementById('splitRowsContainer');
+      const combinedContainer = document.getElementById('combinedRowsContainer');
+      const maxScale = getEffectiveMaxScale();
+
+      // Update Totals Display
+      const totalSave = nominees.reduce((acc, n) => acc + (parseFloat(n.save) || 0), 0);
+      const totalEvict = nominees.reduce((acc, n) => acc + (parseFloat(n.evict) || 0), 0);
+      document.getElementById('totalSaveDisplay').textContent = `${totalSave.toFixed(2)}%`;
+      document.getElementById('totalEvictDisplay').textContent = `${totalEvict.toFixed(2)}%`;
+
+      // 1. Render Split Graph (BBS on Left, BBE on Right)
+      splitContainer.innerHTML = nominees.map(n => {
+        const saveVal = Math.max(0, parseFloat(n.save) || 0);
+        const evictVal = Math.max(0, parseFloat(n.evict) || 0);
+        const saveWidth = getBarWidthPct(saveVal, maxScale);
+        const evictWidth = getBarWidthPct(evictVal, maxScale);
+        const fontSizeClass = n.label.length > 2 ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl';
+
+        return `
+          <div class="standings-card px-3.5 sm:px-6 py-3 sm:py-3.5 flex items-center justify-between gap-2.5 sm:gap-4">
+            <!-- Left Percentage (BBS) -->
+            <div class="w-[74px] sm:w-[96px] text-right flex-shrink-0">
+              <span class="tabular-pct font-bold text-base sm:text-[21px] text-white tracking-tight">
+                ${formatPct(saveVal)}%
+              </span>
+            </div>
+
+            <!-- Left Progress Pill (Fills from right edge toward left) -->
+            <div class="flex-1 pill-track">
+              <div class="bar-fill-left" style="width: ${saveWidth}%;"></div>
+            </div>
+
+            <!-- Center Nominee Badge -->
+            <div class="nominee-badge ${fontSizeClass}" style="background-color: ${n.color};">
+              ${escapeHtml(n.label || '?')}
+            </div>
+
+            <!-- Right Progress Pill (Fills from left edge toward right) -->
+            <div class="flex-1 pill-track">
+              <div class="bar-fill-right" style="width: ${evictWidth}%;"></div>
+            </div>
+
+            <!-- Right Percentage (BBE) -->
+            <div class="w-[82px] sm:w-[104px] text-left flex-shrink-0">
+              <span class="tabular-pct font-bold text-base sm:text-[21px] text-[#e04856] tracking-tight">
+                -${formatPct(evictVal)}%
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // 2. Render Combined Graph (Net Score = BBS - BBE)
+      let combinedList = nominees.map(n => {
+        const saveVal = parseFloat(n.save) || 0;
+        const evictVal = parseFloat(n.evict) || 0;
+        const net = saveVal - evictVal;
+        return { ...n, net };
+      });
+
+      if (combinedSort === 'highest') {
+        combinedList.sort((a, b) => b.net - a.net);
+      } else if (combinedSort === 'lowest') {
+        combinedList.sort((a, b) => a.net - b.net);
+      }
+
+      combinedContainer.innerHTML = combinedList.map(n => {
+        const isPositive = n.net > 0.0001;
+        const isNegative = n.net < -0.0001;
+        const absNet = Math.abs(n.net);
+        const barWidth = getBarWidthPct(absNet, maxScale);
+        const fontSizeClass = n.label.length > 2 ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl';
+
+        const leftLabel = isPositive ? `+${formatPct(n.net)}%` : (isNegative ? '' : '0.00%');
+        const rightLabel = isNegative ? `-${formatPct(absNet)}%` : (isPositive ? '' : '0.00%');
+
+        return `
+          <div class="standings-card px-3.5 sm:px-6 py-3 sm:py-3.5 flex items-center justify-between gap-2.5 sm:gap-4">
+            <!-- Left Net Positive Percentage -->
+            <div class="w-[78px] sm:w-[100px] text-right flex-shrink-0">
+              <span class="tabular-pct font-bold text-base sm:text-[21px] ${isPositive ? 'text-[#38d97c]' : 'text-slate-500'} tracking-tight">
+                ${leftLabel}
+              </span>
+            </div>
+
+            <!-- Left Positive Pill Track -->
+            <div class="flex-1 pill-track">
+              ${isPositive ? `<div class="bar-fill-left" style="width: ${barWidth}%;"></div>` : ''}
+            </div>
+
+            <!-- Center Nominee Badge -->
+            <div class="nominee-badge ${fontSizeClass}" style="background-color: ${n.color};">
+              ${escapeHtml(n.label || '?')}
+            </div>
+
+            <!-- Right Negative Pill Track -->
+            <div class="flex-1 pill-track">
+              ${isNegative ? `<div class="bar-fill-right" style="width: ${barWidth}%;"></div>` : ''}
+            </div>
+
+            <!-- Right Net Negative Percentage -->
+            <div class="w-[82px] sm:w-[104px] text-left flex-shrink-0">
+              <span class="tabular-pct font-bold text-base sm:text-[21px] ${isNegative ? 'text-[#e04856]' : 'text-slate-500'} tracking-tight">
+                ${rightLabel}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Render Editor Inputs for each Nominee
+    function renderEditorList() {
+      const container = document.getElementById('nomineeEditorsList');
+      container.innerHTML = nominees.map((n, index) => {
+        const net = (parseFloat(n.save) || 0) - (parseFloat(n.evict) || 0);
+        const netFormatted = net >= 0 ? `+${net.toFixed(2)}%` : `${net.toFixed(2)}%`;
+        const netBadgeColor = net > 0 ? 'text-[#38d97c] bg-emerald-950/60 border-emerald-800/50' : (net < 0 ? 'text-[#e04856] bg-rose-950/60 border-rose-800/50' : 'text-slate-300 bg-slate-800 border-slate-700');
+
+        return `
+          <div class="bg-[#141929] border border-slate-800 rounded-xl p-3 flex flex-col gap-2.5">
+            <!-- Top row: Badge letter, Color Swatch, Net Preview, Delete -->
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <!-- Color Picker -->
+                <label class="relative w-7 h-7 rounded-full cursor-pointer overflow-hidden border-2 border-slate-600 shadow-sm flex-shrink-0" style="background-color: ${n.color};" title="Change Badge Color">
+                  <input type="color" value="${n.color}" oninput="updateNominee(${index}, 'color', this.value)" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer" />
+                </label>
+
+                <!-- Badge Text Input -->
+                <input type="text" maxlength="4" value="${escapeHtml(n.label)}" oninput="updateNominee(${index}, 'label', this.value)" placeholder="A"
+                  class="w-14 bg-[#0b0e17] border border-slate-700 rounded-lg px-2 py-1 text-center font-display font-extrabold text-sm text-white uppercase focus:outline-none focus:border-cyan-400" title="Nominee Letter or Initials" />
+
+                <!-- Quick Color Dots -->
+                <div class="hidden sm:flex items-center gap-1 ml-1">
+                  ${PRESET_COLORS.slice(0, 5).map(c => `
+                    <button type="button" onclick="updateNominee(${index}, 'color', '${c}')" class="w-3.5 h-3.5 rounded-full border border-black/40 hover:scale-125 transition cursor-pointer" style="background-color: ${c};"></button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-md border text-[11px] font-mono font-bold ${netBadgeColor}" title="Combined Net Score (BBS - BBE)">
+                  Net: ${netFormatted}
+                </span>
+                ${nominees.length > 1 ? `
+                  <button type="button" onclick="removeNominee(${index})" class="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer" title="Remove Nominee">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Vote Inputs Grid: BBS & BBE -->
+            <div class="grid grid-cols-2 gap-2.5">
+              <!-- Vote to Save (BBS) -->
+              <div class="bg-[#0b0e17] p-2 rounded-lg border border-slate-800/90">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-[#38d97c]">Save (BBS %)</span>
+                </div>
+                <input type="number" step="0.01" min="0" max="100" value="${n.save}"
+                  oninput="updateNominee(${index}, 'save', this.value)"
+                  class="w-full bg-transparent font-mono font-bold text-sm text-white focus:outline-none mb-1.5" />
+                <input type="range" min="0" max="100" step="0.5" value="${n.save}"
+                  oninput="updateNominee(${index}, 'save', this.value, true)"
+                  class="w-full slider-save" />
+              </div>
+
+              <!-- Vote to Evict (BBE) -->
+              <div class="bg-[#0b0e17] p-2 rounded-lg border border-slate-800/90">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-[#e04856]">Evict (BBE %)</span>
+                </div>
+                <div class="flex items-center">
+                  <span class="font-mono font-bold text-sm text-[#e04856] mr-0.5">-</span>
+                  <input type="number" step="0.01" min="0" max="100" value="${n.evict}"
+                    oninput="updateNominee(${index}, 'evict', this.value)"
+                    class="w-full bg-transparent font-mono font-bold text-sm text-[#e04856] focus:outline-none mb-1.5" />
+                </div>
+                <input type="range" min="0" max="100" step="0.5" value="${n.evict}"
+                  oninput="updateNominee(${index}, 'evict', this.value, true)"
+                  class="w-full slider-evict" />
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Update a single nominee property
+    function updateNominee(index, field, value, syncInput = false) {
+      if (field === 'save' || field === 'evict') {
+        const parsed = parseFloat(value);
+        nominees[index][field] = isNaN(parsed) ? 0 : Math.max(0, Math.min(100, parsed));
+      } else {
+        nominees[index][field] = value;
+      }
+      renderGraphs();
+      // Update net badge & sync number input if dragged via slider
+      if (syncInput || field === 'color') {
+        renderEditorList();
+      } else {
+        // Update just the Net badge inside the editor card without losing input focus
+        const cards = document.getElementById('nomineeEditorsList').children;
+        if (cards[index]) {
+          const net = (parseFloat(nominees[index].save) || 0) - (parseFloat(nominees[index].evict) || 0);
+          const netSpan = cards[index].querySelector('span[title="Combined Net Score (BBS - BBE)"]');
+          if (netSpan) {
+            netSpan.textContent = `Net: ${net >= 0 ? '+' + net.toFixed(2) : net.toFixed(2)}%`;
+            netSpan.className = `px-2 py-0.5 rounded-md border text-[11px] font-mono font-bold ${
+              net > 0 ? 'text-[#38d97c] bg-emerald-950/60 border-emerald-800/50' :
+              (net < 0 ? 'text-[#e04856] bg-rose-950/60 border-rose-800/50' : 'text-slate-300 bg-slate-800 border-slate-700')
+            }`;
+          }
+        }
+      }
+    }
+
+    function addNominee() {
+      const nextChar = String.fromCharCode(65 + (nominees.length % 26));
+      const nextColor = PRESET_COLORS[nominees.length % PRESET_COLORS.length];
+      nominees.push({
+        id: 'n' + Date.now(),
+        label: nextChar,
+        color: nextColor,
+        save: 10.00,
+        evict: 10.00
+      });
+      renderEditorList();
+      renderGraphs();
+    }
+
+    function removeNominee(index) {
+      if (nominees.length <= 1) return;
+      nominees.splice(index, 1);
+      renderEditorList();
+      renderGraphs();
+    }
+
+    function resetToSample() {
+      nominees = JSON.parse(JSON.stringify(DEFAULT_NOMINEES));
+      document.getElementById('inputSplitSubtitle').value = 'TALLY OF VOTES AS OF LIVE';
+      document.getElementById('inputSplitTitle').value = 'OFFICIAL EVICTION STANDINGS';
+      document.getElementById('inputLegendSave').value = 'VOTE TO SAVE (BBS)';
+      document.getElementById('inputLegendEvict').value = 'VOTE TO EVICT (BBE)';
+      document.getElementById('inputCombinedSubtitle').value = 'NET COMBINED TALLY (BBS − BBE)';
+      document.getElementById('inputCombinedTitle').value = 'COMBINED EVICTION STANDINGS';
+      updateHeaders();
+      renderEditorList();
+      renderGraphs();
+      showToast('Reset to default standings');
+    }
+
+    function updateHeaders() {
+      document.getElementById('renderSplitSubtitle').textContent = document.getElementById('inputSplitSubtitle').value || ' ';
+      document.getElementById('renderSplitTitle').textContent = document.getElementById('inputSplitTitle').value || ' ';
+      document.getElementById('renderLegendSave').textContent = document.getElementById('inputLegendSave').value || 'VOTE TO SAVE (BBS)';
+      document.getElementById('renderLegendEvict').textContent = document.getElementById('inputLegendEvict').value || 'VOTE TO EVICT (BBE)';
+      document.getElementById('renderCombinedSubtitle').textContent = document.getElementById('inputCombinedSubtitle').value || ' ';
+      document.getElementById('renderCombinedTitle').textContent = document.getElementById('inputCombinedTitle').value || ' ';
+    }
+
+    function updateSettings() {
+      scaleMode = document.getElementById('scaleModeSelect').value;
+      combinedSort = document.getElementById('combinedSortSelect').value;
+      renderGraphs();
+    }
+
+    function setEvictDotStyle(style) {
+      evictDotStyle = style;
+      const dot = document.getElementById('evictDotIndicator');
+      const hollowBtn = document.getElementById('dotHollowBtn');
+      const redBtn = document.getElementById('dotRedBtn');
+
+      if (style === 'hollow') {
+        dot.className = 'w-3.5 h-3.5 rounded-full bg-[#090b12] border border-slate-500 inline-block';
+        hollowBtn.className = 'px-2 py-1 rounded bg-slate-700 text-white text-[11px] font-medium';
+        redBtn.className = 'px-2 py-1 rounded bg-slate-900 text-slate-400 text-[11px] font-medium';
+      } else {
+        dot.className = 'w-3.5 h-3.5 rounded-full bg-[#df3646] inline-block shadow-[0_0_8px_rgba(223,54,70,0.6)]';
+        redBtn.className = 'px-2 py-1 rounded bg-slate-700 text-white text-[11px] font-medium';
+        hollowBtn.className = 'px-2 py-1 rounded bg-slate-900 text-slate-400 text-[11px] font-medium';
+      }
+    }
+
+    function setGraphView(mode) {
+      const splitCard = document.getElementById('splitGraphCard');
+      const combinedCard = document.getElementById('combinedGraphCard');
+      const btns = {
+        both: document.getElementById('btnViewBoth'),
+        split: document.getElementById('btnViewSplit'),
+        combined: document.getElementById('btnViewCombined')
+      };
+
+      Object.keys(btns).forEach(k => {
+        btns[k].className = k === mode
+          ? 'px-2.5 py-1.5 rounded-md bg-slate-700 text-white transition'
+          : 'px-2.5 py-1.5 rounded-md text-slate-400 hover:text-white transition';
+      });
+
+      if (mode === 'both') {
+        splitCard.classList.remove('hidden');
+        combinedCard.classList.remove('hidden');
+      } else if (mode === 'split') {
+        splitCard.classList.remove('hidden');
+        combinedCard.classList.add('hidden');
+      } else {
+        splitCard.classList.add('hidden');
+        combinedCard.classList.remove('hidden');
+      }
+    }
+
+    function toggleEditor() {
+      editorVisible = !editorVisible;
+      const editorCol = document.getElementById('editorColumn');
+      const previewCol = document.getElementById('previewColumn');
+      const topToolbar = document.getElementById('topToolbar');
+      const exitBtn = document.getElementById('exitScreenshotBtn');
+
+      if (editorVisible) {
+        editorCol.classList.remove('hidden');
+        previewCol.className = 'lg:col-span-7 xl:col-span-8 flex flex-col gap-6';
+        topToolbar.classList.remove('hidden');
+        exitBtn.classList.add('hidden');
+      } else {
+        editorCol.classList.add('hidden');
+        previewCol.className = 'lg:col-span-12 max-w-3xl mx-auto w-full flex flex-col gap-6';
+        topToolbar.classList.add('hidden');
+        exitBtn.classList.remove('hidden');
+      }
+    }
+
+    async function downloadPNG() {
+      const btn = document.getElementById('btnDownload');
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `<span>Rendering...</span>`;
+      btn.disabled = true;
+
+      try {
+        const target = document.getElementById('captureArea');
+        const canvas = await html2canvas(target, {
+          backgroundColor: '#07090f',
+          scale: 2,
+          useCORS: true,
+          logging: false
+        });
+        const link = document.createElement('a');
+        link.download = `eviction-standings-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('Broadcast graphic saved as PNG!');
+      } catch (err) {
+        console.error(err);
+        showToast('Could not generate image. Try Screenshot Mode.');
+      } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+      }
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastMsg');
+      toast.textContent = msg;
+      toast.classList.remove('opacity-0');
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+      }, 2500);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      renderEditorList();
+      renderGraphs();
+    });
+  </script>
+</body>
+</html>
